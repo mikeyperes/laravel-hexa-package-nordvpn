@@ -12,6 +12,7 @@ class NordVpnAssignCommand extends Command
         {profile : Browser Worker session (profile) ID}
         {server? : NordVPN server key; omit to show the session\'s current assignment and exit IP}
         {--allow-shared : Allow a server another NordVPN session already uses (same IP pool)}
+        {--new-ip : Drop the session\'s pinned NordVPN machine and pin a fresh one (a different exit IP)}
         {--json : Print the result as JSON}';
 
     protected $description = 'Give one browser session its own NordVPN server, switch it onto that route, and report the NordVPN flag: server, exit IP and an IP-check link.';
@@ -41,13 +42,18 @@ class NordVpnAssignCommand extends Command
             }
             // A failed server leaves the session on its previous server (restored below), never half-switched.
             $previous = $nordvpn->browserServers()[$profile] ?? null;
-            $restore = function () use ($nordvpn, $profile, $previous): void {
+            $previousNode = $nordvpn->nodeFor($profile);
+            $restore = function () use ($nordvpn, $profile, $previous, $previousNode): void {
                 $nordvpn->selectServerFor($profile, $previous);
+                $nordvpn->pinNode($profile, $previousNode !== '' ? $previousNode : null);
             };
             try {
                 $nordvpn->selectServerFor($profile, $key);
             } catch (\InvalidArgumentException $exception) {
                 return $this->finish(false, ['message' => $exception->getMessage()]);
+            }
+            if ($this->option('new-ip')) {
+                $nordvpn->pinNode($profile, null);
             }
             $test = $nordvpn->test($profile);
             if (! $test['success']) {
@@ -55,6 +61,8 @@ class NordVpnAssignCommand extends Command
 
                 return $this->finish(false, ['message' => 'NordVPN test failed on "'.$key.'": '.$test['message'].' The session stays on '.($previous ?? 'the default server').'.']);
             }
+            // Pin the machine that passed, so the browser keeps this one exit IP instead of rotating machines.
+            $nordvpn->pinNode($profile, (string) ($test['data']['node'] ?? '') ?: null);
             $written = $writer->write($nordvpn->proxyProfile($profile), $profile);
             if (($written['success'] ?? false) !== true) {
                 $restore();
@@ -83,6 +91,7 @@ class NordVpnAssignCommand extends Command
             'server_key' => $nordvpn->serverFor($profile),
             'server' => $server['label'] ?? '',
             'host' => $server['host'] ?? '',
+            'node' => $nordvpn->nodeFor($profile),
             'ip' => $data['ip'] ?? null,
             'place' => implode(', ', array_filter([$data['city'] ?? '', $data['region'] ?? '', $data['country'] ?? ''])),
             'network' => $data['network'] ?? '',
@@ -90,7 +99,7 @@ class NordVpnAssignCommand extends Command
             'check_url' => Route::has('browser-console.sessions.ip-check') ? route('browser-console.sessions.ip-check', ['profile' => $profile]) : '',
         ];
         $payload['flag'] = $onNord
-            ? '🛡️ NordVPN '.($key !== '' ? 'assigned' : 'in use').' — session '.$profile.' · server '.$payload['server'].' ('.$payload['host'].', key '.$payload['server_key'].') · exit '.$payload['ip'].' · '.$payload['place'].($payload['network'] !== '' ? ' · '.$payload['network'] : '').' · checked '.$checked
+            ? '🛡️ NordVPN '.($key !== '' ? 'assigned' : 'in use').' — session '.$profile.' · server '.$payload['server'].' ('.$payload['host'].($payload['node'] !== '' ? ' → machine '.$payload['node'] : '').', key '.$payload['server_key'].') · exit '.$payload['ip'].' · '.$payload['place'].($payload['network'] !== '' ? ' · '.$payload['network'] : '').' · checked '.$checked
             : '⚠️ Not on NordVPN — session '.$profile.' · route '.($payload['route_mode'] ?? 'unknown').($payload['ip'] ? ' · exit '.$payload['ip'].' · '.$payload['place'].' · '.$payload['network'] : '');
 
         return $this->finish(($egress['success'] ?? false) === true && ($key === '' || $onNord), $payload + ['message' => (string) ($egress['message'] ?? '')]);

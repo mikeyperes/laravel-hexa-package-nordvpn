@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0 - 2026-09-24
+
+- Each server name rotates across several NordVPN machines, so a session could change exit IP mid-session and use
+  one connection slot per machine. `nordvpn:assign` now pins the session to the one machine that passed its test
+  (fixed exit IP, shown in the flag as `→ machine <ip>`); `--new-ip` drops the pin and pins a fresh machine.
+- A rejected login now says so and names the likely cause (the account's simultaneous-connection limit is full)
+  instead of "check the credentials".
+
 ## 1.3.0 - 2026-09-24
 
 - Four more NordVPN SOCKS5 servers that accept the service login: Chicago, Phoenix, San Francisco and
