@@ -14,6 +14,9 @@ class NordVpnServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../../config/nordvpn.php', 'nordvpn');
         $this->app->singleton(NordVpnService::class);
+        if ($this->app->runningInConsole()) {
+            $this->commands([\hexa_package_nordvpn\Console\NordVpnAssignCommand::class]);
+        }
     }
 
     /**
