@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0 - 2026-09-24
+
+- Four more NordVPN SOCKS5 servers that accept the service login: Chicago, Phoenix, San Francisco and
+  Amsterdam. NordVPN's HTTPS proxies (port 89) refuse the service login (407), so SOCKS5 stays the only route.
+
 ## 1.2.1 - 2026-09-24
 
 - `nordvpn:assign` restores the session's previous server when the new one fails its test, binding or switch.
