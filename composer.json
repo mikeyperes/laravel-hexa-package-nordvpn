@@ -1,0 +1,25 @@
+{
+    "name": "hexawebsystems/laravel-hexa-package-nordvpn",
+    "description": "NordVPN SOCKS5 service credentials, server selection and connection test for Hexa browser routes.",
+    "type": "library",
+    "version": "1.0.0",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2",
+        "hexawebsystems/laravel-hexa-core": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "hexa_package_nordvpn\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "hexa_package_nordvpn\\Providers\\NordVpnServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
