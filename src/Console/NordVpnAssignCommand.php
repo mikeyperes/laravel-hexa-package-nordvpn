@@ -39,6 +39,11 @@ class NordVpnAssignCommand extends Command
             if ($sharing !== [] && ! $this->option('allow-shared')) {
                 return $this->finish(false, ['message' => 'Server "'.$key.'" is already used by '.implode(', ', $sharing).'; pick another so this session gets its own IP (or pass --allow-shared).']);
             }
+            // A failed server leaves the session on its previous server (restored below), never half-switched.
+            $previous = $nordvpn->browserServers()[$profile] ?? null;
+            $restore = function () use ($nordvpn, $profile, $previous): void {
+                $nordvpn->selectServerFor($profile, $previous);
+            };
             try {
                 $nordvpn->selectServerFor($profile, $key);
             } catch (\InvalidArgumentException $exception) {
@@ -46,14 +51,21 @@ class NordVpnAssignCommand extends Command
             }
             $test = $nordvpn->test($profile);
             if (! $test['success']) {
-                return $this->finish(false, ['message' => 'NordVPN test failed: '.$test['message']]);
+                $restore();
+
+                return $this->finish(false, ['message' => 'NordVPN test failed on "'.$key.'": '.$test['message'].' The session stays on '.($previous ?? 'the default server').'.']);
             }
             $written = $writer->write($nordvpn->proxyProfile($profile), $profile);
             if (($written['success'] ?? false) !== true) {
+                $restore();
+
                 return $this->finish(false, ['message' => 'The Browser Worker rejected the NordVPN route: '.($written['message'] ?? 'unknown error').'.']);
             }
             $switched = $routes->switch($profile, 'protected');
             if (($switched['success'] ?? false) !== true) {
+                $restore();
+                $writer->write($nordvpn->proxyProfile($profile), $profile);
+
                 return $this->finish(false, ['message' => 'The session could not switch to the NordVPN route: '.($switched['message'] ?? 'unknown error').'.']);
             }
         }

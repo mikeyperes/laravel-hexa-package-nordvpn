@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1 - 2026-09-24
+
+- `nordvpn:assign` restores the session's previous server when the new one fails its test, binding or switch.
+
 ## 1.2.0 - 2026-09-24
 
 - `nordvpn:assign <session> [server]` gives one browser session its own NordVPN server (refusing a server another
