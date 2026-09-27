@@ -33,43 +33,22 @@ class NordVpnAssignCommand extends Command
         $routes = app($routesClass);
 
         if ($key !== '') {
-            if (! array_key_exists($key, $nordvpn->servers())) {
-                return $this->finish(false, ['message' => 'Unknown NordVPN server "'.$key.'". Servers: '.implode(', ', array_keys($nordvpn->servers())).'.']);
+            // Chooses, tests and pins the server; a failed server leaves the session on its previous one.
+            $prepared = $nordvpn->prepareBrowser($profile, $key, (bool) $this->option('allow-shared'), (bool) $this->option('new-ip'));
+            if (! $prepared['success']) {
+                return $this->finish(false, ['message' => $prepared['message']]);
             }
-            $sharing = $this->sessionsOn($nordvpn, $writer, $key, $profile);
-            if ($sharing !== [] && ! $this->option('allow-shared')) {
-                return $this->finish(false, ['message' => 'Server "'.$key.'" is already used by '.implode(', ', $sharing).'; pick another so this session gets its own IP (or pass --allow-shared).']);
-            }
-            // A failed server leaves the session on its previous server (restored below), never half-switched.
-            $previous = $nordvpn->browserServers()[$profile] ?? null;
-            $previousNode = $nordvpn->nodeFor($profile);
-            $restore = function () use ($nordvpn, $profile, $previous, $previousNode): void {
-                $nordvpn->selectServerFor($profile, $previous);
-                $nordvpn->pinNode($profile, $previousNode !== '' ? $previousNode : null);
-            };
-            try {
-                $nordvpn->selectServerFor($profile, $key);
-            } catch (\InvalidArgumentException $exception) {
-                return $this->finish(false, ['message' => $exception->getMessage()]);
-            }
-            if ($this->option('new-ip')) {
-                $nordvpn->pinNode($profile, null);
-            }
-            $test = $nordvpn->test($profile);
-            if (! $test['success']) {
-                $restore();
-
-                return $this->finish(false, ['message' => 'NordVPN test failed on "'.$key.'": '.$test['message'].' The session stays on '.($previous ?? 'the default server').'.']);
-            }
-            // Pin the machine that passed, so the browser keeps this one exit IP instead of rotating machines.
-            $nordvpn->pinNode($profile, (string) ($test['data']['node'] ?? '') ?: null);
+            $previous = $prepared['data']['previous_server'];
+            $restore = fn () => $nordvpn->restoreBrowser($profile, $previous, (string) $prepared['data']['previous_node']);
             $written = $writer->write($nordvpn->proxyProfile($profile), $profile);
             if (($written['success'] ?? false) !== true) {
                 $restore();
 
                 return $this->finish(false, ['message' => 'The Browser Worker rejected the NordVPN route: '.($written['message'] ?? 'unknown error').'.']);
             }
-            $switched = $routes->switch($profile, 'protected');
+            // CRITICAL — see browser-worker BUGLOG.md BW-2026-09-27-01: reapply restarts a session already on its
+            // protected route, so Chrome leaves through the new server instead of the old one.
+            $switched = $routes->switch($profile, 'protected', true);
             if (($switched['success'] ?? false) !== true) {
                 $restore();
                 $writer->write($nordvpn->proxyProfile($profile), $profile);
@@ -103,24 +82,6 @@ class NordVpnAssignCommand extends Command
             : '⚠️ Not on NordVPN — session '.$profile.' · route '.($payload['route_mode'] ?? 'unknown').($payload['ip'] ? ' · exit '.$payload['ip'].' · '.$payload['place'].' · '.$payload['network'] : '');
 
         return $this->finish(($egress['success'] ?? false) === true && ($key === '' || $onNord), $payload + ['message' => (string) ($egress['message'] ?? '')]);
-    }
-
-    /**
-     * Other sessions bound to NordVPN that exit through this server.
-     *
-     * @return array<int, string>
-     */
-    private function sessionsOn(NordVpnService $nordvpn, object $writer, string $key, string $except): array
-    {
-        $sessions = [];
-        foreach ((array) ($writer->status()['profiles'] ?? []) as $item) {
-            $browser = (string) ($item['browser_profile'] ?? '');
-            if ($browser !== '' && $browser !== $except && ($item['profile_key'] ?? '') === 'nordvpn' && $nordvpn->serverFor($browser) === $key) {
-                $sessions[] = $browser;
-            }
-        }
-
-        return $sessions;
     }
 
     /** @param array<string, mixed> $payload */

@@ -226,6 +226,114 @@ class NordVpnService
     }
 
     /**
+     * Other browser sessions bound to NordVPN that exit through a server, read from the Browser Worker route file.
+     *
+     * @return array<int, string>
+     */
+    public function sessionsOn(string $key, ?string $except = null): array
+    {
+        $writerClass = 'hexa_package_browser_worker\\Services\\BrowserProxyConfigWriter';
+        if (! class_exists($writerClass)) {
+            return [];
+        }
+        $except = $except !== null ? strtolower(trim($except)) : null;
+        $sessions = [];
+        foreach ((array) (app($writerClass)->status()['profiles'] ?? []) as $item) {
+            $browser = (string) ($item['browser_profile'] ?? '');
+            if ($browser !== '' && $browser !== $except && ($item['profile_key'] ?? '') === 'nordvpn' && $this->serverFor($browser) === $key) {
+                $sessions[] = $browser;
+            }
+        }
+
+        return $sessions;
+    }
+
+    /**
+     * The server a browser session should use: its own when it has one, otherwise the first configured server no
+     * other NordVPN session uses (never another session's IP pool), or null when every server is taken.
+     */
+    public function ownServerFor(string $browserProfile): ?string
+    {
+        $profile = strtolower(trim($browserProfile));
+        $own = $this->browserServers()[$profile] ?? '';
+        if ($own !== '') {
+            return $own;
+        }
+        foreach (array_keys($this->servers()) as $key) {
+            if ($this->sessionsOn((string) $key, $profile) === []) {
+                return (string) $key;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Get a browser session ready for NordVPN: choose its server ($key, else its own, else a free one), test that
+     * one server once and pin the machine that answered. On failure the session keeps its previous server and
+     * machine. The caller then binds proxyProfile() to the browser and switches its route; restoreBrowser() undoes
+     * this step when that fails.
+     *
+     * @return array{success: bool, message: string, data?: array<string, mixed>}
+     */
+    public function prepareBrowser(string $browserProfile, ?string $key = null, bool $allowShared = false, bool $newIp = false): array
+    {
+        $profile = strtolower(trim($browserProfile));
+        if (preg_match('/^[a-z0-9][a-z0-9_-]{0,79}$/', $profile) !== 1) {
+            return ['success' => false, 'message' => 'Invalid browser profile.'];
+        }
+        if (! $this->configured()) {
+            return ['success' => false, 'message' => 'Save the NordVPN service username and password first.'];
+        }
+        $key = $key !== null && $key !== '' ? $key : $this->ownServerFor($profile);
+        if ($key === null) {
+            return ['success' => false, 'message' => 'Every NordVPN server is already used by another session. Free one, or share one with nordvpn:assign --allow-shared.'];
+        }
+        if (! array_key_exists($key, $this->servers())) {
+            return ['success' => false, 'message' => 'Unknown NordVPN server "'.$key.'". Servers: '.implode(', ', array_keys($this->servers())).'.'];
+        }
+        $sharing = $this->sessionsOn($key, $profile);
+        if ($sharing !== [] && ! $allowShared) {
+            return ['success' => false, 'message' => 'Server "'.$key.'" is already used by '.implode(', ', $sharing).'; pick another so this session gets its own IP (or pass --allow-shared).'];
+        }
+
+        $previous = $this->browserServers()[$profile] ?? null;
+        $previousNode = $this->nodeFor($profile);
+        $this->selectServerFor($profile, $key);
+        if ($newIp) {
+            $this->pinNode($profile, null);
+        }
+        $test = $this->test($profile);
+        if (! $test['success']) {
+            $this->restoreBrowser($profile, $previous, $previousNode);
+
+            return ['success' => false, 'message' => 'NordVPN test failed on "'.$key.'": '.$test['message'].' The session stays on '.($previous ?? 'the default server').'.'];
+        }
+        // Pin the machine that passed, so the browser keeps this one exit IP instead of rotating machines.
+        $this->pinNode($profile, (string) ($test['data']['node'] ?? '') ?: null);
+
+        return [
+            'success' => true,
+            'message' => $test['message'],
+            'data' => [
+                'server' => $key,
+                'node' => $this->nodeFor($profile),
+                'previous_server' => $previous,
+                'previous_node' => $previousNode,
+            ],
+        ];
+    }
+
+    /**
+     * Put a browser session back on the server and machine it had before prepareBrowser().
+     */
+    public function restoreBrowser(string $browserProfile, ?string $server, string $node): void
+    {
+        $this->selectServerFor($browserProfile, $server);
+        $this->pinNode($browserProfile, $node !== '' ? $node : null);
+    }
+
+    /**
      * One stored service credential ('username' or 'password'), or an empty string.
      */
     private function credential(string $name): string

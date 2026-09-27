@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.0 - 2026-09-27
+
+- `NordVpnService::prepareBrowser()` chooses, tests and pins a session's server (the one asked for, else its own,
+  else the first server no other NordVPN session uses) and `restoreBrowser()` undoes it. `nordvpn:assign` and the
+  Browser Console NordVPN switch share it, so a session without its own server never lands on another session's
+  IP pool (the default Atlanta is jpn-miami's).
+- `nordvpn:assign` restarts a session that is already on its protected route (Browser Worker `reapply`), so Chrome
+  really moves to the new server; before, only the saved route changed (browser-worker BW-2026-09-27-01).
+
 ## 1.4.0 - 2026-09-24
 
 - Each server name rotates across several NordVPN machines, so a session could change exit IP mid-session and use
