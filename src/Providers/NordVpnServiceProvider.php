@@ -14,6 +14,12 @@ class NordVpnServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../../config/nordvpn.php', 'nordvpn');
         $this->app->singleton(NordVpnService::class);
+        // Offer NordVPN as a server-side exit when the proxy package's EgressRouter is installed.
+        if (interface_exists(\hexa_package_proxy\Egress\EgressRoute::class)) {
+            $this->app->afterResolving(\hexa_package_proxy\Egress\EgressRouter::class, function ($router, $app): void {
+                $router->register($app->make(\hexa_package_nordvpn\Egress\NordVpnEgressRoute::class));
+            });
+        }
         if ($this->app->runningInConsole()) {
             $this->commands([\hexa_package_nordvpn\Console\NordVpnAssignCommand::class]);
         }

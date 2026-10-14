@@ -2,7 +2,7 @@
 
 return [
     'enabled' => env('NORDVPN_PACKAGE_ENABLED', true),
-    'version' => '1.5.0',
+    'version' => '1.6.0',
 
     // Hexa Core CredentialService slug and key names for the NordVPN service credentials.
     'credential_slug' => 'nordvpn',
@@ -25,6 +25,9 @@ return [
         'us' => ['label' => 'United States (any)', 'host' => 'us.socks.nordhold.net'],
         'amsterdam' => ['label' => 'Amsterdam, NL', 'host' => 'amsterdam.nl.socks.nordhold.net'],
     ],
+
+    // Servers the server-side exit route (proxy package EgressRouter) rotates through, one per attempt.
+    'egress_servers' => ['atlanta', 'new-york', 'dallas', 'chicago', 'los-angeles'],
 
     // Exit-address lookup used by the connection test.
     'egress_lookup_url' => env('NORDVPN_EGRESS_LOOKUP_URL', 'https://ipinfo.io/json'),

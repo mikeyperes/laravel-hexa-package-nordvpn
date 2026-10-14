@@ -180,6 +180,31 @@ class NordVpnService
     }
 
     /**
+     * A server-side SOCKS5 exit for the proxy package's EgressRouter, with credentials (internal only, never
+     * render it). Attempt N uses the Nth server of `nordvpn.egress_servers`, so a retry exits from another IP.
+     */
+    public function egressProxyUrl(int $attempt = 0): ?string
+    {
+        if (! $this->configured()) {
+            return null;
+        }
+        $keys = array_values(array_filter(
+            (array) config('nordvpn.egress_servers', []),
+            fn ($key): bool => is_string($key) && isset($this->servers()[$key]),
+        ));
+        if ($keys === []) {
+            $keys = [$this->selectedServer()];
+        }
+        $host = (string) ($this->servers()[$keys[max(0, $attempt) % count($keys)]]['host'] ?? '');
+        if ($host === '') {
+            return null;
+        }
+
+        return 'socks5h://'.rawurlencode($this->credential('username')).':'.rawurlencode($this->credential('password'))
+            .'@'.$host.':'.(int) config('nordvpn.socks5_port', 1080);
+    }
+
+    /**
      * Log into the session's SOCKS5 server and report the exit address. Tests the session's pinned machine, or
      * one machine the server name resolves to now (returned as data.node for pinning). Never returns credentials.
      *

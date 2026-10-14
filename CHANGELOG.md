@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.0 - 2026-10-14
+
+- `NordVpnEgressRoute` offers NordVPN as a server-side exit to the proxy package's `EgressRouter` (the shared
+  "switch exit IP" interface) when that package is installed. `NordVpnService::egressProxyUrl($attempt)` rotates
+  through `nordvpn.egress_servers`, so each retry exits from another IP. Browser sessions are untouched.
+
 ## 1.5.0 - 2026-09-27
 
 - `NordVpnService::prepareBrowser()` chooses, tests and pins a session's server (the one asked for, else its own,
