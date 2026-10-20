@@ -2,7 +2,7 @@
 
 return [
     'enabled' => env('NORDVPN_PACKAGE_ENABLED', true),
-    'version' => '1.6.0',
+    'version' => '1.7.0',
 
     // Hexa Core CredentialService slug and key names for the NordVPN service credentials.
     'credential_slug' => 'nordvpn',
@@ -28,6 +28,17 @@ return [
 
     // Servers the server-side exit route (proxy package EgressRouter) rotates through, one per attempt.
     'egress_servers' => ['atlanta', 'new-york', 'dallas', 'chicago', 'los-angeles'],
+
+    // NordVPN HTTPS proxy servers (same service credentials, port 89): a large pool of exits beside the
+    // SOCKS5 servers above. The list comes from Nord's server API and is cached; attempt N uses the Nth host.
+    // Keep pool_size small: every host in use takes one of the account's device slots.
+    'https_proxy' => [
+        'port' => 89,
+        'servers_api' => 'https://api.nordvpn.com/v1/servers/recommendations',
+        'country_id' => 228,
+        'pool_size' => 3,
+        'cache_hours' => 6,
+    ],
 
     // Exit-address lookup used by the connection test.
     'egress_lookup_url' => env('NORDVPN_EGRESS_LOOKUP_URL', 'https://ipinfo.io/json'),

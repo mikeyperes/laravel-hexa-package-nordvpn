@@ -18,6 +18,7 @@ class NordVpnServiceProvider extends ServiceProvider
         if (interface_exists(\hexa_package_proxy\Egress\EgressRoute::class)) {
             $this->app->afterResolving(\hexa_package_proxy\Egress\EgressRouter::class, function ($router, $app): void {
                 $router->register($app->make(\hexa_package_nordvpn\Egress\NordVpnEgressRoute::class));
+                $router->register($app->make(\hexa_package_nordvpn\Egress\NordVpnHttpsEgressRoute::class));
             });
         }
         if ($this->app->runningInConsole()) {

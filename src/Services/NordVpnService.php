@@ -4,6 +4,7 @@ namespace hexa_package_nordvpn\Services;
 
 use hexa_core\Models\Setting;
 use hexa_core\Services\CredentialService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -202,6 +203,58 @@ class NordVpnService
 
         return 'socks5h://'.rawurlencode($this->credential('username')).':'.rawurlencode($this->credential('password'))
             .'@'.$host.':'.(int) config('nordvpn.socks5_port', 1080);
+    }
+
+    /**
+     * A server-side HTTPS proxy exit from NordVPN's proxy server pool, with credentials (internal only, never
+     * render it). Attempt N uses the Nth host of the cached pool, so a retry exits from another IP.
+     */
+    public function httpsProxyUrl(int $attempt = 0): ?string
+    {
+        if (! $this->configured()) {
+            return null;
+        }
+        $hosts = $this->httpsProxyHosts();
+        if ($hosts === []) {
+            return null;
+        }
+        $host = $hosts[max(0, $attempt) % count($hosts)];
+
+        return 'https://'.rawurlencode($this->credential('username')).':'.rawurlencode($this->credential('password'))
+            .'@'.$host.':'.(int) config('nordvpn.https_proxy.port', 89);
+    }
+
+    /**
+     * Hosts of NordVPN's recommended HTTPS proxy servers, cached. Nord's certificate covers
+     * `*.proxy.nordvpn.com`, so each `usNNNN.nordvpn.com` is addressed as `usNNNN.proxy.nordvpn.com`.
+     *
+     * @return list<string>
+     */
+    public function httpsProxyHosts(): array
+    {
+        $config = (array) config('nordvpn.https_proxy', []);
+        $size = max(1, (int) ($config['pool_size'] ?? 3));
+
+        return Cache::remember('nordvpn.https_proxy_hosts.'.$size, now()->addHours(max(1, (int) ($config['cache_hours'] ?? 6))), function () use ($config, $size): array {
+            try {
+                $servers = Http::timeout(20)->get((string) ($config['servers_api'] ?? ''), [
+                    'filters[servers_technologies][identifier]' => 'proxy_ssl',
+                    'filters[country_id]' => (int) ($config['country_id'] ?? 228),
+                    'limit' => $size,
+                ])->json();
+            } catch (\Throwable) {
+                return [];
+            }
+            $hosts = [];
+            foreach ((array) $servers as $server) {
+                $name = strtolower((string) ($server['hostname'] ?? ''));
+                if (preg_match('/^([a-z]{2}\d+)\.nordvpn\.com$/', $name, $m) === 1) {
+                    $hosts[] = $m[1].'.proxy.nordvpn.com';
+                }
+            }
+
+            return array_slice($hosts, 0, $size);
+        });
     }
 
     /**

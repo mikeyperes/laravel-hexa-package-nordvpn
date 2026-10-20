@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0 - 2026-10-20
+
+- `NordVpnHttpsEgressRoute` (key `nordvpn-https`) adds NordVPN's HTTPS proxy servers (port 89) as a second
+  EgressRouter exit. `NordVpnService::httpsProxyUrl($attempt)` rotates a small cached pool from Nord's server API
+  (`nordvpn.https_proxy`); hosts are addressed as `usNNNN.proxy.nordvpn.com` to match Nord's certificate. Tested
+  2026-10-20: YouTube trusts these exits while most SOCKS5 exits get its bot check.
+
 ## 1.6.0 - 2026-10-14
 
 - `NordVpnEgressRoute` offers NordVPN as a server-side exit to the proxy package's `EgressRouter` (the shared
