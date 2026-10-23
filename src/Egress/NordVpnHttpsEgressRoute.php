@@ -3,13 +3,13 @@
 namespace hexa_package_nordvpn\Egress;
 
 use hexa_package_nordvpn\Services\NordVpnService;
-use hexa_package_proxy\Egress\EgressRoute;
+use hexa_package_proxy\Egress\CountedEgressRoute;
 
 /**
  * NordVPN's HTTPS proxy servers (port 89) as a second server-side exit for the proxy package's EgressRouter.
  * A much larger IP pool than the SOCKS5 servers; each attempt uses the next host of the cached pool.
  */
-final class NordVpnHttpsEgressRoute implements EgressRoute
+final class NordVpnHttpsEgressRoute implements CountedEgressRoute
 {
     public function __construct(private readonly NordVpnService $nord) {}
 
@@ -31,5 +31,10 @@ final class NordVpnHttpsEgressRoute implements EgressRoute
     public function proxyUrl(int $attempt = 0): ?string
     {
         return $this->nord->httpsProxyUrl($attempt);
+    }
+
+    public function exitCount(): int
+    {
+        return $this->nord->httpsExitCount();
     }
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.8.0 - 2026-10-23
+
+- Both NordVPN exit routes implement `CountedEgressRoute` (`exitCount()`: SOCKS5 egress servers, HTTPS pool size), so
+  callers can try every NordVPN server with `exits(0)`. Needs Proxy 1.4.0.
+
 ## 1.7.0 - 2026-10-20
 
 - `NordVpnHttpsEgressRoute` (key `nordvpn-https`) adds NordVPN's HTTPS proxy servers (port 89) as a second

@@ -184,18 +184,33 @@ class NordVpnService
      * A server-side SOCKS5 exit for the proxy package's EgressRouter, with credentials (internal only, never
      * render it). Attempt N uses the Nth server of `nordvpn.egress_servers`, so a retry exits from another IP.
      */
+    /** @return list<string> The SOCKS5 server keys server-side exits rotate through. */
+    public function egressServerKeys(): array
+    {
+        $keys = array_values(array_filter(
+            (array) config('nordvpn.egress_servers', []),
+            fn ($key): bool => is_string($key) && isset($this->servers()[$key]),
+        ));
+
+        return $keys === [] ? [$this->selectedServer()] : $keys;
+    }
+
+    public function egressExitCount(): int
+    {
+        return $this->configured() ? count($this->egressServerKeys()) : 0;
+    }
+
+    public function httpsExitCount(): int
+    {
+        return $this->configured() ? count($this->httpsProxyHosts()) : 0;
+    }
+
     public function egressProxyUrl(int $attempt = 0): ?string
     {
         if (! $this->configured()) {
             return null;
         }
-        $keys = array_values(array_filter(
-            (array) config('nordvpn.egress_servers', []),
-            fn ($key): bool => is_string($key) && isset($this->servers()[$key]),
-        ));
-        if ($keys === []) {
-            $keys = [$this->selectedServer()];
-        }
+        $keys = $this->egressServerKeys();
         $host = (string) ($this->servers()[$keys[max(0, $attempt) % count($keys)]]['host'] ?? '');
         if ($host === '') {
             return null;
