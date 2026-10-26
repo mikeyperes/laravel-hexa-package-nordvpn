@@ -11,8 +11,9 @@ NordVPN SOCKS5 servers as a Browser Worker protected route.
   proxy writer accepts (`provider` `nordvpn`, `socks5://host:1080`). The Browser Console uses it for a
   browser whose route is bound to the `nordvpn` profile; the Worker relay logs into SOCKS5 because
   Chrome cannot send SOCKS5 credentials.
-- **New IP:** `prepareBrowser($profile, newIp: true)` (`nordvpn:assign <profile> <server> --new-ip`, the Browser
-  Console's New IP button) pins a machine other than the session's current one on the same server, found through the
+- **New IP:** without a named server (`nordvpn:assign <profile> --new-ip`, the Browser Console's New IP button) the
+  session moves to a random city from `config('nordvpn.new_ip_servers')` (a different one first), on a machine
+  no other session is pinned to. With a named server, `prepareBrowser($profile, $server, newIp: true)` pins a machine other than the session's current one on the same server, found through the
   system resolver and `config('nordvpn.doh_resolvers')`, or else from machines that already passed a test there
   (Setting `nordvpn_known_nodes`), and tests only that one. When Nord offers no other machine
   it says so and the current IP stays.

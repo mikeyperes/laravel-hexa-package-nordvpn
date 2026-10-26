@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.0 - 2026-10-26
+
+- New IP without a named server (the Browser Console button, `nordvpn:assign <profile> --new-ip`) moves the
+  session to a random US city from `nordvpn.new_ip_servers`, a different city first, so each press gives a new
+  place and IP. A city another session uses may be shared, but never a machine another session is pinned to, so
+  no two sessions share an exit IP. Only DNS is asked per city; one machine is tested. NordVPN offers no SOCKS5
+  servers in Canada. `nordvpn:assign <profile> <server> --new-ip` still keeps the named server.
+
 ## 1.8.1 - 2026-10-26
 
 - New IP (`prepareBrowser(..., newIp: true)`, `nordvpn:assign --new-ip`) now always lands on a different NordVPN

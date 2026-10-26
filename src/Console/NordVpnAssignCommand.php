@@ -12,7 +12,7 @@ class NordVpnAssignCommand extends Command
         {profile : Browser Worker session (profile) ID}
         {server? : NordVPN server key; omit to show the session\'s current assignment and exit IP}
         {--allow-shared : Allow a server another NordVPN session already uses (same IP pool)}
-        {--new-ip : Drop the session\'s pinned NordVPN machine and pin a fresh one (a different exit IP)}
+        {--new-ip : A new exit IP: a random free US city when no server is named, else another machine on that server}
         {--json : Print the result as JSON}';
 
     protected $description = 'Give one browser session its own NordVPN server, switch it onto that route, and report the NordVPN flag: server, exit IP and an IP-check link.';

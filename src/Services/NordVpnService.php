@@ -380,14 +380,16 @@ class NordVpnService
         if (! $this->configured()) {
             return ['success' => false, 'message' => 'Save the NordVPN service username and password first.'];
         }
-        $key = $key !== null && $key !== '' ? $key : $this->ownServerFor($profile);
+        $chosen = $key !== null && $key !== '';
+        $key = $chosen ? $key : $this->ownServerFor($profile);
+        $current = $key;
         if ($key === null) {
             return ['success' => false, 'message' => 'Every NordVPN server is already used by another session. Free one, or share one with nordvpn:assign --allow-shared.'];
         }
         if (! array_key_exists($key, $this->servers())) {
             return ['success' => false, 'message' => 'Unknown NordVPN server "'.$key.'". Servers: '.implode(', ', array_keys($this->servers())).'.'];
         }
-        $sharing = $this->sessionsOn($key, $profile);
+        $sharing = $newIp ? [] : $this->sessionsOn($key, $profile);
         if ($sharing !== [] && ! $allowShared) {
             return ['success' => false, 'message' => 'Server "'.$key.'" is already used by '.implode(', ', $sharing).'; pick another so this session gets its own IP (or pass --allow-shared).'];
         }
@@ -396,15 +398,25 @@ class NordVpnService
         $previousNode = $this->nodeFor($profile);
         $this->selectServerFor($profile, $key);
         if ($newIp) {
-            // A NordVPN host name answers with one machine for about a minute, so plain re-resolution often hands
-            // back the machine already in use (same exit IP). Pin a different machine before the single test.
-            $host = (string) ($this->servers()[$key]['host'] ?? '');
-            $fresh = $this->otherNode($key, $host, $previous === $key ? $previousNode : '');
+            // New IP: a machine no session uses yet, on a random city from nordvpn.new_ip_servers when no server was
+            // named (cities may be shared; machines never are). A Nord host name answers with one machine for about
+            // a minute, so the current machine is excluded explicitly. Only DNS is asked here; one machine is tested.
+            $taken = array_merge($this->nodesPinnedByOthers($profile), [$previousNode]);
+            $cities = $chosen ? [$key] : $this->shuffledCities((string) $current);
+            $fresh = '';
+            foreach ($cities as $city) {
+                $fresh = $this->otherNode($city, (string) ($this->servers()[$city]['host'] ?? ''), $taken);
+                if ($fresh !== '') {
+                    $key = $city;
+                    break;
+                }
+            }
             if ($fresh === '') {
                 $this->restoreBrowser($profile, $previous, $previousNode);
 
-                return ['success' => false, 'message' => 'NordVPN only offered the machine this session already uses on "'.$key.'", so the IP would not change. Try New IP again in a minute.'];
+                return ['success' => false, 'message' => 'NordVPN offered no machine that another session is not already using, so the IP would not change. Try New IP again in a minute.'];
             }
+            $this->selectServerFor($profile, $key);
             $this->pinNode($profile, $fresh);
         }
         $test = $this->test($profile);
@@ -430,12 +442,44 @@ class NordVpnService
     }
 
     /**
-     * One NordVPN machine on server $key other than $exclude, or an empty string when none differs. Fresh answers
+     * The nordvpn.new_ip_servers cities in random order, any city other than $current first so New IP changes place.
+     *
+     * @return array<int, string>
+     */
+    private function shuffledCities(string $current): array
+    {
+        $cities = array_values(array_filter((array) config('nordvpn.new_ip_servers', []),
+            fn ($key) => is_string($key) && array_key_exists($key, $this->servers())));
+        shuffle($cities);
+        usort($cities, fn ($a, $b) => (int) ($a === $current) <=> (int) ($b === $current));
+
+        return $cities;
+    }
+
+    /**
+     * Machines pinned by every NordVPN browser session other than $profile.
+     *
+     * @return array<int, string>
+     */
+    private function nodesPinnedByOthers(string $profile): array
+    {
+        $nodes = [];
+        foreach ($this->browserNodes() as $other => $pin) {
+            if ($other !== $profile && is_array($pin) && filter_var($pin['node'] ?? '', FILTER_VALIDATE_IP)) {
+                $nodes[] = (string) $pin['node'];
+            }
+        }
+
+        return $nodes;
+    }
+
+    /**
+     * One NordVPN machine on server $key not in $exclude, or an empty string when none is free. Fresh answers
      * from the system resolver and the configured DNS-over-HTTPS resolvers come first; because a Nord host name
      * answers with one machine for about a minute, machines that already passed a test on this server are the
      * fallback, picked at random so sessions spread over them.
      */
-    private function otherNode(string $key, string $host, string $exclude): string
+    private function otherNode(string $key, string $host, array $exclude): string
     {
         if ($host === '') {
             return '';
@@ -453,7 +497,7 @@ class NordVpnService
             }
         }
         $usable = fn (array $nodes): array => array_values(array_filter(array_unique($nodes),
-            fn ($node) => filter_var($node, FILTER_VALIDATE_IP) && $node !== $exclude));
+            fn ($node) => filter_var($node, FILTER_VALIDATE_IP) && ! in_array($node, $exclude, true)));
         foreach ($usable($resolved) as $node) {
             $this->rememberNode($key, $node);
 
