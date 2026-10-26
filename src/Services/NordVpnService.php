@@ -24,6 +24,8 @@ class NordVpnService
      */
     private const BROWSER_NODES_SETTING = 'nordvpn_browser_nodes';
 
+    private const KNOWN_NODES_SETTING = 'nordvpn_known_nodes';
+
     public function __construct(private CredentialService $credentials)
     {
     }
@@ -394,7 +396,16 @@ class NordVpnService
         $previousNode = $this->nodeFor($profile);
         $this->selectServerFor($profile, $key);
         if ($newIp) {
-            $this->pinNode($profile, null);
+            // A NordVPN host name answers with one machine for about a minute, so plain re-resolution often hands
+            // back the machine already in use (same exit IP). Pin a different machine before the single test.
+            $host = (string) ($this->servers()[$key]['host'] ?? '');
+            $fresh = $this->otherNode($key, $host, $previous === $key ? $previousNode : '');
+            if ($fresh === '') {
+                $this->restoreBrowser($profile, $previous, $previousNode);
+
+                return ['success' => false, 'message' => 'NordVPN only offered the machine this session already uses on "'.$key.'", so the IP would not change. Try New IP again in a minute.'];
+            }
+            $this->pinNode($profile, $fresh);
         }
         $test = $this->test($profile);
         if (! $test['success']) {
@@ -404,6 +415,7 @@ class NordVpnService
         }
         // Pin the machine that passed, so the browser keeps this one exit IP instead of rotating machines.
         $this->pinNode($profile, (string) ($test['data']['node'] ?? '') ?: null);
+        $this->rememberNode($key, (string) ($test['data']['node'] ?? ''));
 
         return [
             'success' => true,
@@ -415,6 +427,66 @@ class NordVpnService
                 'previous_node' => $previousNode,
             ],
         ];
+    }
+
+    /**
+     * One NordVPN machine on server $key other than $exclude, or an empty string when none differs. Fresh answers
+     * from the system resolver and the configured DNS-over-HTTPS resolvers come first; because a Nord host name
+     * answers with one machine for about a minute, machines that already passed a test on this server are the
+     * fallback, picked at random so sessions spread over them.
+     */
+    private function otherNode(string $key, string $host, string $exclude): string
+    {
+        if ($host === '') {
+            return '';
+        }
+        $resolved = gethostbynamel($host) ?: [];
+        foreach ((array) config('nordvpn.doh_resolvers', []) as $resolver) {
+            try {
+                $answers = Http::timeout(5)->withHeaders(['Accept' => 'application/dns-json'])
+                    ->get((string) $resolver, ['name' => $host, 'type' => 'A'])->json('Answer');
+            } catch (\Throwable) {
+                continue;
+            }
+            foreach ((array) $answers as $answer) {
+                $resolved[] = (string) ($answer['data'] ?? '');
+            }
+        }
+        $usable = fn (array $nodes): array => array_values(array_filter(array_unique($nodes),
+            fn ($node) => filter_var($node, FILTER_VALIDATE_IP) && $node !== $exclude));
+        foreach ($usable($resolved) as $node) {
+            $this->rememberNode($key, $node);
+
+            return $node;
+        }
+        $known = $usable((array) ($this->knownNodes()[$key] ?? []));
+
+        return $known !== [] ? $known[array_rand($known)] : '';
+    }
+
+    /**
+     * Record a machine seen on server $key, keeping the most recent configured number per server.
+     */
+    private function rememberNode(string $key, string $node): void
+    {
+        if (! filter_var($node, FILTER_VALIDATE_IP)) {
+            return;
+        }
+        $map = $this->knownNodes();
+        $nodes = array_values(array_diff((array) ($map[$key] ?? []), [$node]));
+        $nodes[] = $node;
+        $map[$key] = array_slice($nodes, -max(1, (int) config('nordvpn.known_nodes_per_server', 20)));
+        Setting::setValue(self::KNOWN_NODES_SETTING, json_encode($map, JSON_UNESCAPED_SLASHES), 'packages');
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    private function knownNodes(): array
+    {
+        $map = json_decode((string) Setting::getValue(self::KNOWN_NODES_SETTING, '{}'), true);
+
+        return is_array($map) ? $map : [];
     }
 
     /**

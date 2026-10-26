@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.1 - 2026-10-26
+
+- New IP (`prepareBrowser(..., newIp: true)`, `nordvpn:assign --new-ip`) now always lands on a different NordVPN
+  machine. A NordVPN host name answers with one machine for about a minute, so New IP often re-pinned the same
+  machine and kept the same exit IP. It now picks a machine other than the current one from the system resolver
+  and the `nordvpn.doh_resolvers` DNS-over-HTTPS resolvers, or else from the machines that already passed a test
+  on that server (Setting `nordvpn_known_nodes`, `nordvpn.known_nodes_per_server`), tests only that one, and when
+  none is known it says so and keeps the current IP.
+
 ## 1.8.0 - 2026-10-23
 
 - Both NordVPN exit routes implement `CountedEgressRoute` (`exitCount()`: SOCKS5 egress servers, HTTPS pool size), so

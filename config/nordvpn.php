@@ -2,7 +2,7 @@
 
 return [
     'enabled' => env('NORDVPN_PACKAGE_ENABLED', true),
-    'version' => '1.7.0',
+    'version' => '1.8.1',
 
     // Hexa Core CredentialService slug and key names for the NordVPN service credentials.
     'credential_slug' => 'nordvpn',
@@ -43,6 +43,11 @@ return [
     // Exit-address lookup used by the connection test.
     'egress_lookup_url' => env('NORDVPN_EGRESS_LOOKUP_URL', 'https://ipinfo.io/json'),
     'test_timeout_seconds' => 20,
+
+    // DNS-over-HTTPS resolvers New IP asks for another machine behind a NordVPN host (JSON API, type A).
+    'doh_resolvers' => ['https://cloudflare-dns.com/dns-query', 'https://dns.google/resolve'],
+    // Machines per server remembered after a passing test, New IP's fallback when DNS only offers the current one.
+    'known_nodes_per_server' => 20,
 
     'links' => [
         'service_credentials' => 'https://my.nordaccount.com/dashboard/nordvpn/manual-configuration/',
